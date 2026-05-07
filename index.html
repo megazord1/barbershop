@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MotoExpress - Premium</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.8);
+            --primary-blue: #3b82f6;
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+            --input-bg: #1e293b;
+            --input-border: #334155;
+        }
+
+        body { background-color: var(--bg-dark); color: var(--text-main); font-family: 'Inter', sans-serif; margin: 0; }
+        .form-control { background-color: var(--input-bg) !important; border: 1px solid var(--input-border) !important; color: #fff !important; }
+        .glass-card { background: var(--card-bg); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 1.5rem; }
+        .btn-primary-custom { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border: none; padding: 12px; font-weight: bold; border-radius: 12px; width: 100%; color: white; }
+        .pedido-card { background: rgba(255, 255, 255, 0.05); border-radius: 15px; padding: 15px; margin-bottom: 15px; border-left: 5px solid var(--primary-blue); }
+        .chat-box { background: rgba(15, 23, 42, 0.9); border-radius: 15px; height: 250px; overflow-y: auto; padding: 10px; margin-bottom: 10px; border: 1px solid var(--input-border); display: flex; flex-direction: column; }
+        .msg { margin-bottom: 8px; padding: 8px 12px; border-radius: 12px; max-width: 80%; font-size: 0.9rem; word-wrap: break-word; }
+        .msg-me { background: var(--primary-blue); align-self: flex-end; color: white; }
+        .msg-other { background: var(--input-bg); align-self: flex-start; color: var(--text-main); }
+        #map { height: 250px; width: 100%; border-radius: 15px; margin-top: 15px; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<audio id="audioNotificacao" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto"></audio>
+
+<div id="authSection" class="container py-5">
+    <div class="glass-card mx-auto" style="max-width: 400px;">
+        <h2 class="fw-bold text-primary text-center mb-4">MotoExpress</h2>
+        <div id="formLogin">
+            <input type="email" id="loginEmail" class="form-control mb-2" placeholder="E-mail">
+            <input type="password" id="loginSenha" class="form-control mb-3" placeholder="Senha">
+            <button id="btnLoginAction" class="btn-primary-custom mb-3">ENTRAR</button>
+        </div>
+    </div>
+</div>
+
+<div id="mainApp" class="container py-4" style="display:none;">
+    <header class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="fw-bold text-primary m-0">MotoExpress</h4>
+        <button id="btnLogout" class="btn btn-sm btn-outline-danger">Sair</button>
+    </header>
+
+    <!-- AREA CLIENTE -->
+    <div id="areaCliente" class="col-12 col-md-6 mx-auto hidden">
+        <div class="glass-card mb-4">
+            <input type="text" id="origem" class="form-control mb-2" placeholder="Endereço de Coleta">
+            <input type="text" id="destino" class="form-control mb-3" placeholder="Endereço de Entrega">
+            <button id="btnSolicitar" class="btn-primary-custom">CHAMAR MOTOBOY</button>
+        </div>
+        
+        <div id="statusPedidoCliente"></div>
+
+        <!-- CONTAINER DE CHAT DO CLIENTE -->
+        <div id="containerChatCliente" class="glass-card mb-4 hidden">
+            <h6 id="nomeMotoboyChat" class="text-primary mb-3">Chat com Motoboy</h6>
+            <div id="boxChatCliente" class="chat-box"></div>
+            <div class="input-group">
+                <input type="text" id="inputChatCliente" class="form-control" placeholder="Digite aqui...">
+                <button class="btn btn-primary" onclick="enviarMensagem('cliente')"><i class="bi bi-send"></i></button>
+            </div>
+        </div>
+        <div id="mapContainer" class="hidden"><div id="map"></div></div>
+    </div>
+
+    <!-- AREA MOTOBOY -->
+    <div id="areaMotoboy" class="col-12 col-md-8 mx-auto hidden">
+        <div id="minhaCorridaAtiva"></div>
+        
+        <!-- CONTAINER DE CHAT DO MOTOBOY -->
+        <div id="containerChatMotoboy" class="glass-card mb-4 hidden">
+            <h6 class="text-primary mb-3">Chat com Cliente</h6>
+            <div id="boxChatMotoboy" class="chat-box"></div>
+            <div class="input-group">
+                <input type="text" id="inputChatMotoboy" class="form-control" placeholder="Mensagem para o cliente...">
+                <button class="btn btn-primary" onclick="enviarMensagem('motoboy')"><i class="bi bi-send"></i></button>
+            </div>
+        </div>
+
+        <h5 class="text-warning mb-3">Pedidos Disponíveis</h5>
+        <div id="listaPedidos"></div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc, collection, addDoc, query, where, onSnapshot, updateDoc, serverTimestamp, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyBsnN_KrorIrJD3faVOxqFD3SfUILr7XUY",
+        authDomain: "motoexpress-887ba.firebaseapp.com",
+        projectId: "motoexpress-887ba",
+        storageBucket: "motoexpress-887ba.appspot.com",
+        messagingSenderId: "931221356023",
+        appId: "1:931221356023:web:7f6f5e4d3c2b1a"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    let map, marker, pedidoAtivoId = null;
+
+    onAuthStateChanged(auth, async u => {
+        if(u) {
+            const uDoc = await getDoc(doc(db, "usuarios", u.uid));
+            const uData = uDoc.data();
+            document.getElementById('authSection').classList.add('hidden');
+            document.getElementById('mainApp').style.display = 'block';
+            if(uData.tipo === 'cliente') {
+                document.getElementById('areaCliente').classList.remove('hidden');
+                monitorarPedidosCliente(u.uid);
+            } else {
+                document.getElementById('areaMotoboy').classList.remove('hidden');
+                iniciarFluxoMotoboy();
+            }
+        }
+    });
+
+    function monitorarPedidosCliente(uid) {
+        onSnapshot(query(collection(db, "pedidos"), where("clienteId", "==", uid)), async snap => {
+            const container = document.getElementById('statusPedidoCliente');
+            const chatContainer = document.getElementById('containerChatCliente');
+            container.innerHTML = "";
+            let temPedidoAceito = false;
+
+            for (const d of snap.docs) {
+                const p = d.data();
+                if(p.status !== 'finalizado') {
+                    if(p.status === 'aceito' && p.motoboyId) {
+                        temPedidoAceito = true;
+                        pedidoAtivoId = d.id;
+                        
+                        // Força a exibição do chat e mapa
+                        chatContainer.classList.remove('hidden');
+                        document.getElementById('mapContainer').classList.remove('hidden');
+                        
+                        const mDoc = await getDoc(doc(db, "usuarios", p.motoboyId));
+                        if(mDoc.exists()) document.getElementById('nomeMotoboyChat').innerText = "Chat com " + mDoc.data().nome;
+                        
+                        carregarMapa(p.motoboyId);
+                        monitorarChat(d.id, 'boxChatCliente');
+                    }
+                    container.innerHTML += `<div class="pedido-card">Status: <b>${p.status.toUpperCase()}</b><br><small>${p.origem}</small></div>`;
+                }
+            }
+            if(!temPedidoAceito) {
+                chatContainer.classList.add('hidden');
+                document.getElementById('mapContainer').classList.add('hidden');
+            }
+        });
+    }
+
+    function iniciarFluxoMotoboy() {
+        navigator.geolocation.watchPosition(p => {
+            updateDoc(doc(db, "usuarios", auth.currentUser.uid), { lat: p.coords.latitude, lng: p.coords.longitude });
+        });
+
+        onSnapshot(query(collection(db, "pedidos"), where("status", "==", "pendente")), snap => {
+            const l = document.getElementById('listaPedidos'); l.innerHTML = "";
+            snap.forEach(d => {
+                l.innerHTML += `<div class="pedido-card">${d.data().origem}<button class="btn btn-success btn-sm w-100 mt-2" onclick="aceitar('${d.id}')">ACEITAR</button></div>`;
+            });
+        });
+
+        onSnapshot(query(collection(db, "pedidos"), where("motoboyId", "==", auth.currentUser.uid), where("status", "==", "aceito")), snap => {
+            const c = document.getElementById('minhaCorridaAtiva');
+            const chatContainerM = document.getElementById('containerChatMotoboy');
+            c.innerHTML = "";
+            
+            if(!snap.empty) {
+                const d = snap.docs[0];
+                pedidoAtivoId = d.id;
+                chatContainerM.classList.remove('hidden');
+                monitorarChat(d.id, 'boxChatMotoboy');
+                c.innerHTML = `<div class="glass-card mb-4 border-success">Corrida Ativa<button class="btn btn-success w-100 mt-2" onclick="finalizar('${d.id}')">FINALIZAR</button></div>`;
+            } else {
+                chatContainerM.classList.add('hidden');
+                pedidoAtivoId = null;
+            }
+        });
+    }
+
+    function monitorarChat(idPedido, boxId) {
+        onSnapshot(query(collection(db, "pedidos", idPedido, "chat"), orderBy("data", "asc")), snap => {
+            const box = document.getElementById(boxId);
+            box.innerHTML = "";
+            snap.forEach(m => {
+                const isMe = m.data().senderId === auth.currentUser.uid;
+                box.innerHTML += `<div class="msg ${isMe ? 'msg-me' : 'msg-other'}">${m.data().texto}</div>`;
+            });
+            box.scrollTop = box.scrollHeight;
+        });
+    }
+
+    window.enviarMensagem = async (tipo) => {
+        const input = document.getElementById(tipo === 'cliente' ? 'inputChatCliente' : 'inputChatMotoboy');
+        if(input.value && pedidoAtivoId) {
+            await addDoc(collection(db, "pedidos", pedidoAtivoId, "chat"), {
+                texto: input.value, senderId: auth.currentUser.uid, data: serverTimestamp()
+            });
+            input.value = "";
+        }
+    };
+
+    function carregarMapa(mid) {
+        if (!map) {
+            map = L.map('map').setView([-15, -47], 4);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            marker = L.marker([0, 0]).addTo(map);
+        }
+        onSnapshot(doc(db, "usuarios", mid), d => {
+            if(d.exists()) {
+                const pos = [d.data().lat, d.data().lng];
+                marker.setLatLng(pos);
+                map.setView(pos, 16);
+            }
+        });
+    }
+
+    window.aceitar = id => updateDoc(doc(db, "pedidos", id), { status: "aceito", motoboyId: auth.currentUser.uid });
+    window.finalizar = id => updateDoc(doc(db, "pedidos", id), { status: "finalizado" });
+    document.getElementById('btnLoginAction').addEventListener('click', () => signInWithEmailAndPassword(auth, document.getElementById('loginEmail').value, document.getElementById('loginSenha').value));
+    document.getElementById('btnLogout').addEventListener('click', () => signOut(auth));
+</script>
+</body>
+</html>
