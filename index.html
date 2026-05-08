@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MotoExpress - Reset Total</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root { --bg: #0f172a; --card: #1e293b; --primary: #3b82f6; --success: #10b981; }
+        body { background: var(--bg); color: #f8fafc; font-family: system-ui, sans-serif; margin: 0; }
+        .glass-card { background: var(--card); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 1.2rem; margin-bottom: 1rem; }
+        .form-control { background: #0f172a !important; border: 1px solid #334155 !important; color: #fff !important; }
+        .chat-box { background: #0a0f1d; border-radius: 12px; height: 250px; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 8px; border: 1px solid #334155; }
+        .msg { padding: 8px 12px; border-radius: 14px; max-width: 80%; font-size: 0.9rem; }
+        .msg-me { background: var(--primary); align-self: flex-end; }
+        .msg-other { background: #334155; align-self: flex-start; }
+        #map { height: 250px; border-radius: 12px; margin-top: 10px; z-index: 1; }
+        .hidden { display: none !important; }
+        .btn-main { background: var(--primary); color: white; border: none; padding: 12px; border-radius: 10px; font-weight: 600; width: 100%; }
+    </style>
+</head>
+<body>
+
+<div id="authArea" class="container py-5">
+    <div class="glass-card mx-auto" style="max-width: 400px;">
+        <h3 class="text-center mb-4 text-primary fw-bold">MotoExpress</h3>
+        <input type="email" id="email" class="form-control mb-2" placeholder="E-mail">
+        <input type="password" id="senha" class="form-control mb-3" placeholder="Senha">
+        <button id="btnEntrar" class="btn-main">ENTRAR</button>
+    </div>
+</div>
+
+<div id="appArea" class="container py-3 hidden">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 id="saudacao" class="m-0 fw-bold"></h5>
+        <button id="btnSair" class="btn btn-sm btn-outline-danger">Sair</button>
+    </div>
+
+    <!-- VIEW CLIENTE -->
+    <div id="viewCliente" class="hidden">
+        <div id="formPedido" class="glass-card">
+            <input type="text" id="origem" class="form-control mb-2" placeholder="Onde retira?">
+            <input type="text" id="destino" class="form-control mb-3" placeholder="Onde entrega?">
+            <button id="btnCalcular" class="btn btn-outline-primary w-100 mb-2">CALCULAR VALOR</button>
+            <div id="boxPreco" class="text-center hidden">
+                <h4 class="text-success fw-bold">R$ <span id="valFinal">0.00</span></h4>
+                <button id="btnPedir" class="btn-main">SOLICITAR AGORA</button>
+            </div>
+        </div>
+        
+        <div id="statusAtual"></div>
+
+        <div id="tracking" class="hidden">
+            <div class="glass-card">
+                <div id="chatC" class="chat-box mb-2"></div>
+                <div class="input-group">
+                    <input type="text" id="inputC" class="form-control" placeholder="Mensagem...">
+                    <button class="btn btn-primary" onclick="enviarMsg('cliente')"><i class="bi bi-send"></i></button>
+                </div>
+            </div>
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <!-- VIEW MOTOBOY -->
+    <div id="viewMotoboy" class="hidden">
+        <div id="jobAtivo"></div>
+        <div id="boxChatM" class="glass-card hidden">
+            <div id="chatM" class="chat-box mb-2"></div>
+            <div class="input-group">
+                <input type="text" id="inputM" class="form-control" placeholder="Mensagem...">
+                <button class="btn btn-primary" onclick="enviarMsg('motoboy')"><i class="bi bi-send"></i></button>
+            </div>
+        </div>
+        <p class="text-warning small fw-bold mt-3">PEDIDOS DISPONÍVEIS</p>
+        <div id="listaJobs"></div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc, collection, addDoc, query, where, onSnapshot, updateDoc, serverTimestamp, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyBsnN_KrorIrJD3faVOxqFD3SfUILr7XUY",
+        authDomain: "motoexpress-887ba.firebaseapp.com",
+        projectId: "motoexpress-887ba",
+        storageBucket: "motoexpress-887ba.appspot.com",
+        messagingSenderId: "931221356023",
+        appId: "1:931221356023:web:7f6f5e4d3c2b1a"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    let map, marker, pAtivoId = null, precoT = 0, unsubChat = null;
+
+    onAuthStateChanged(auth, async u => {
+        if(u) {
+            const dU = await getDoc(doc(db, "usuarios", u.uid));
+            if(dU.exists()){
+                const info = dU.data();
+                document.getElementById('authArea').classList.add('hidden');
+                document.getElementById('appArea').classList.remove('hidden');
+                document.getElementById('saudacao').innerHTML = `Olá, <span class="text-primary">${info.nome || 'Usuário'}</span>`;
+                
+                if(info.tipo === 'cliente') {
+                    document.getElementById('viewCliente').classList.remove('hidden');
+                    fluxoCliente(u.uid);
+                } else {
+                    document.getElementById('viewMotoboy').classList.remove('hidden');
+                    fluxoMotoboy();
+                }
+            }
+        }
+    });
+
+    function fluxoCliente(uid) {
+        const q = query(collection(db, "pedidos"), where("clienteId", "==", uid), orderBy("data", "desc"), limit(1));
+        onSnapshot(q, snap => {
+            const statusDiv = document.getElementById('statusAtual');
+            const form = document.getElementById('formPedido');
+            const track = document.getElementById('tracking');
+
+            if(snap.empty) {
+                form.classList.remove('hidden');
+                statusDiv.innerHTML = "";
+                return;
+            }
+
+            const p = snap.docs[0].data();
+            pAtivoId = snap.docs[0].id;
+
+            if(p.status === 'finalizado') {
+                form.classList.remove('hidden');
+                statusDiv.innerHTML = "";
+                track.classList.add('hidden');
+                pAtivoId = null;
+            } else {
+                form.classList.add('hidden');
+                let textoStatus = p.status === 'pendente' ? 
+                    'Procurando um motoboy disponível...' : 
+                    `${p.motoboyNome || 'O motoboy'} aceitou e está a caminho!`;
+                
+                statusDiv.innerHTML = `<div class="glass-card text-center border-primary">${textoStatus}</div>`;
+
+                if(p.status === 'aceito') {
+                    track.classList.remove('hidden');
+                    initChat(pAtivoId, 'chatC');
+                    initMapa(p.motoboyId);
+                }
+            }
+        }, err => console.error("Erro no Listener Cliente (Verifique Índices):", err));
+    }
+
+    function fluxoMotoboy() {
+        if(navigator.geolocation) navigator.geolocation.watchPosition(pos => {
+            updateDoc(doc(db, "usuarios", auth.currentUser.uid), { lat: pos.coords.latitude, lng: pos.coords.longitude });
+        });
+
+        // Pedidos aguardando
+        onSnapshot(query(collection(db, "pedidos"), where("status", "==", "pendente")), snap => {
+            const l = document.getElementById('listaJobs'); l.innerHTML = "";
+            snap.forEach(d => {
+                l.innerHTML += `<div class="glass-card">
+                    <b>R$ ${(d.data().valorTotal * 0.8).toFixed(2)}</b><br><small>Para: ${d.data().destino}</small>
+                    <button class="btn btn-success btn-sm w-100 mt-2" onclick="aceitarJob('${d.id}')">ACEITAR CORRIDA</button>
+                </div>`;
+            });
+        });
+
+        // Pedido que eu (motoboy) aceitei
+        onSnapshot(query(collection(db, "pedidos"), where("motoboyId", "==", auth.currentUser.uid), where("status", "==", "aceito")), snap => {
+            const ja = document.getElementById('jobAtivo'); ja.innerHTML = "";
+            if(!snap.empty) {
+                const docP = snap.docs[0];
+                pAtivoId = docP.id;
+                document.getElementById('boxChatM').classList.remove('hidden');
+                initChat(pAtivoId, 'chatM');
+                ja.innerHTML = `
+                    <div class="glass-card border-success text-center">
+                        <p class="mb-2"><b>Entrega em:</b> ${docP.data().destino}</p>
+                        <button class="btn btn-success w-100 fw-bold" onclick="finalizarJob('${pAtivoId}')">CONCLUIR ENTREGA</button>
+                    </div>`;
+            } else {
+                document.getElementById('boxChatM').classList.add('hidden');
+                pAtivoId = null;
+            }
+        });
+    }
+
+    function initChat(id, boxId) {
+        if(unsubChat) unsubChat();
+        unsubChat = onSnapshot(query(collection(db, "pedidos", id, "chat"), orderBy("data", "asc")), snap => {
+            const box = document.getElementById(boxId);
+            let h = "";
+            snap.forEach(m => {
+                const isMe = m.data().sId === auth.currentUser.uid;
+                h += `<div class="msg ${isMe ? 'msg-me' : 'msg-other'}">${m.data().t}</div>`;
+            });
+            box.innerHTML = h;
+            box.scrollTo(0, box.scrollHeight);
+        });
+    }
+
+    window.enviarMsg = async (tipo) => {
+        const inp = document.getElementById(tipo === 'cliente' ? 'inputC' : 'inputM');
+        const txt = inp.value.trim();
+        if(txt && pAtivoId) {
+            inp.value = "";
+            await addDoc(collection(db, "pedidos", pAtivoId, "chat"), { 
+                t: txt, sId: auth.currentUser.uid, data: serverTimestamp() 
+            });
+        }
+    };
+
+    function initMapa(mid) {
+        if(!map) {
+            map = L.map('map', {tap: false}).setView([-15, -47], 4);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            marker = L.marker([0,0]).addTo(map);
+        }
+        onSnapshot(doc(db, "usuarios", mid), d => {
+            if(d.exists() && d.data().lat) {
+                const p = [d.data().lat, d.data().lng];
+                marker.setLatLng(p); map.setView(p, 16);
+            }
+        });
+    }
+
+    document.getElementById('btnCalcular').addEventListener('click', () => {
+        precoT = (Math.random() * 7 + 12);
+        document.getElementById('valFinal').innerText = precoT.toFixed(2);
+        document.getElementById('boxPreco').classList.remove('hidden');
+    });
+
+    document.getElementById('btnPedir').addEventListener('click', async () => {
+        const o = document.getElementById('origem').value;
+        const d = document.getElementById('destino').value;
+        if(o && d) {
+            await addDoc(collection(db, "pedidos"), {
+                origem: o, destino: d, valorTotal: precoT, status: 'pendente',
+                clienteId: auth.currentUser.uid, data: serverTimestamp()
+            });
+            document.getElementById('boxPreco').classList.add('hidden');
+        }
+    });
+
+    window.aceitarJob = async (id) => {
+        const u = await getDoc(doc(db, "usuarios", auth.currentUser.uid));
+        updateDoc(doc(db, "pedidos", id), { 
+            status: 'aceito', 
+            motoboyId: auth.currentUser.uid, 
+            motoboyNome: u.data().nome || 'Motoboy' 
+        });
+    };
+
+    window.finalizarJob = id => updateDoc(doc(db, "pedidos", id), { status: 'finalizado' });
+    
+    document.getElementById('btnEntrar').addEventListener('click', () => {
+        signInWithEmailAndPassword(auth, document.getElementById('email').value, document.getElementById('senha').value)
+            .catch(() => alert("Usuário não encontrado no Authentication."));
+    });
+    
+    document.getElementById('btnSair').addEventListener('click', () => signOut(auth).then(() => location.reload()));
+</script>
+</body>
+</html>
