@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MotoExpress v2 - Black Edition</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        /* Nova Identidade Visual: Deep Purple & Emerald */
+        :root {
+            --bg-body: #09090b;
+            --bg-card: #18181b;
+            --accent: #a855f7; /* Roxo */
+            --success: #10b981; /* Esmeralda */
+            --text: #f4f4f5;
+            --border: rgba(168, 85, 247, 0.2);
+        }
+
+        body { 
+            background-color: var(--bg-body); 
+            color: var(--text); 
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            margin: 0;
+        }
+
+        .glass-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 1.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+        }
+
+        .form-control {
+            background: #27272a !important;
+            border: 1px solid #3f3f46 !important;
+            color: #fff !important;
+            border-radius: 10px;
+        }
+
+        .btn-accent {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 10px;
+            font-weight: 700;
+            transition: 0.3s;
+        }
+
+        .btn-accent:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        /* Chat Estilizado */
+        .chat-container {
+            background: #09090b;
+            height: 300px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid #27272a;
+        }
+
+        .bubble {
+            padding: 10px 14px;
+            border-radius: 15px;
+            max-width: 85%;
+            font-size: 0.9rem;
+        }
+
+        .bubble-me { background: var(--accent); align-self: flex-end; border-bottom-right-radius: 2px; }
+        .bubble-other { background: #27272a; align-self: flex-start; border-bottom-left-radius: 2px; }
+
+        #map { height: 280px; border-radius: 16px; border: 1px solid var(--border); }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<!-- TELA DE LOGIN -->
+<div id="authScreen" class="container py-5">
+    <div class="glass-card mx-auto" style="max-width: 400px;">
+        <div class="text-center mb-4">
+            <i class="bi bi-lightning-charge-fill text-accent" style="font-size: 2rem;"></i>
+            <h2 class="fw-bold mt-2">MotoExpress</h2>
+            <p class="text-muted">Inicie sua jornada</p>
+        </div>
+        <input type="email" id="userEmail" class="form-control mb-2" placeholder="E-mail">
+        <input type="password" id="userPass" class="form-control mb-3" placeholder="Senha">
+        <button id="loginBtn" class="btn-accent w-100">ENTRAR NO SISTEMA</button>
+    </div>
+</div>
+
+<!-- DASHBOARD PRINCIPAL -->
+<div id="mainDashboard" class="container py-3 hidden">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <small class="text-muted d-block">Bem-vindo(a),</small>
+            <h5 id="userNameDisplay" class="fw-bold m-0">Carregando...</h5>
+        </div>
+        <button id="logoutBtn" class="btn btn-sm btn-outline-secondary rounded-pill">Sair</button>
+    </div>
+
+    <!-- VISÃO: CLIENTE -->
+    <div id="clientView" class="hidden">
+        <div id="orderForm" class="glass-card mb-4">
+            <h6 class="fw-bold mb-3">Solicitar Nova Entrega</h6>
+            <input type="text" id="pickupLoc" class="form-control mb-2" placeholder="Ponto de Retirada">
+            <input type="text" id="deliveryLoc" class="form-control mb-3" placeholder="Destino Final">
+            <button id="calcBtn" class="btn btn-outline-light w-100 mb-3">Cotar Valor</button>
+            
+            <div id="priceDisplay" class="text-center hidden">
+                <span class="text-muted d-block small">VALOR ESTIMADO</span>
+                <h3 class="text-success fw-bold">R$ <span id="finalPrice">0,00</span></h3>
+                <button id="orderBtn" class="btn-accent w-100 mt-2">CONFIRMAR PEDIDO</button>
+            </div>
+        </div>
+
+        <div id="clientStatusArea"></div>
+
+        <div id="trackingArea" class="hidden">
+            <div class="glass-card mb-3">
+                <div id="clientChatBox" class="chat-container mb-2"></div>
+                <div class="input-group">
+                    <input type="text" id="clientMsgInput" class="form-control" placeholder="Falar com o motoboy...">
+                    <button class="btn btn-accent" onclick="sendMessage('client')"><i class="bi bi-send"></i></button>
+                </div>
+            </div>
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <!-- VISÃO: MOTOBOY -->
+    <div id="driverView" class="hidden">
+        <div id="activeJobCard"></div>
+        
+        <div id="driverChatArea" class="glass-card mb-4 hidden">
+            <div id="driverChatBox" class="chat-container mb-2"></div>
+            <div class="input-group">
+                <input type="text" id="driverMsgInput" class="form-control" placeholder="Falar com o cliente...">
+                <button class="btn btn-accent" onclick="sendMessage('driver')"><i class="bi bi-send"></i></button>
+            </div>
+        </div>
+
+        <div class="d-flex align-items-center mb-2">
+            <span class="badge bg-success me-2">Online</span>
+            <span class="small fw-bold">PEDIDOS NA REGIÃO</span>
+        </div>
+        <div id="availableJobsList"></div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc, collection, addDoc, query, where, onSnapshot, updateDoc, serverTimestamp, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyBsnN_KrorIrJD3faVOxqFD3SfUILr7XUY",
+        authDomain: "motoexpress-887ba.firebaseapp.com",
+        projectId: "motoexpress-887ba",
+        storageBucket: "motoexpress-887ba.appspot.com",
+        messagingSenderId: "931221356023",
+        appId: "1:931221356023:web:7f6f5e4d3c2b1a"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    let currentOrder = null, userRole = null, Lmap, Lmarker, chatUnsub = null;
+
+    onAuthStateChanged(auth, async user => {
+        if(user) {
+            const userDoc = await getDoc(doc(db, "usuarios", user.uid));
+            if(userDoc.exists()) {
+                const data = userDoc.data();
+                userRole = data.tipo;
+                document.getElementById('authScreen').classList.add('hidden');
+                document.getElementById('mainDashboard').classList.remove('hidden');
+                document.getElementById('userNameDisplay').innerText = data.nome || 'Usuário';
+
+                if(userRole === 'cliente') {
+                    document.getElementById('clientView').classList.remove('hidden');
+                    startClientLogic(user.uid);
+                } else {
+                    document.getElementById('driverView').classList.remove('hidden');
+                    startDriverLogic();
+                }
+            }
+        } else {
+            document.getElementById('authScreen').classList.remove('hidden');
+            document.getElementById('mainDashboard').classList.add('hidden');
+        }
+    });
+
+    // --- LÓGICA DO CLIENTE ---
+    function startClientLogic(uid) {
+        const q = query(collection(db, "pedidos"), where("clienteId", "==", uid), orderBy("data", "desc"), limit(1));
+        onSnapshot(q, snap => {
+            const statusDiv = document.getElementById('clientStatusArea');
+            const form = document.getElementById('orderForm');
+            const track = document.getElementById('trackingArea');
+
+            if(snap.empty) { form.classList.remove('hidden'); return; }
+            
+            const p = snap.docs[0].data();
+            currentOrder = snap.docs[0].id;
+
+            if(p.status === 'finalizado') {
+                form.classList.remove('hidden'); track.classList.add('hidden');
+                statusDiv.innerHTML = "";
+                currentOrder = null;
+            } else {
+                form.classList.add('hidden');
+                let statusMsg = p.status === 'pendente' ? 'Aguardando um motoboy aceitar...' : 'Motoboy a caminho!';
+                statusDiv.innerHTML = `<div class="glass-card text-center mb-3 border-success">${statusMsg}</div>`;
+                
+                if(p.status === 'aceito') {
+                    track.classList.remove('hidden');
+                    syncChat(currentOrder, 'clientChatBox');
+                    syncMap(p.motoboyId);
+                }
+            }
+        });
+    }
+
+    // --- LÓGICA DO MOTOBOY ---
+    function startDriverLogic() {
+        if(navigator.geolocation) navigator.geolocation.watchPosition(pos => {
+            updateDoc(doc(db, "usuarios", auth.currentUser.uid), { lat: pos.coords.latitude, lng: pos.coords.longitude });
+        });
+
+        onSnapshot(query(collection(db, "pedidos"), where("status", "==", "pendente")), snap => {
+            const list = document.getElementById('availableJobsList');
+            list.innerHTML = "";
+            snap.forEach(d => {
+                list.innerHTML += `<div class="glass-card mb-2">
+                    <div class="d-flex justify-content-between"><b>R$ ${(d.data().valorTotal * 0.8).toFixed(2)}</b> <span class="badge bg-primary">Novo</span></div>
+                    <small class="text-muted">Destino: ${d.data().deliveryLoc}</small>
+                    <button class="btn btn-accent btn-sm w-100 mt-2" onclick="acceptJob('${d.id}')">ACEITAR</button>
+                </div>`;
+            });
+        });
+
+        onSnapshot(query(collection(db, "pedidos"), where("motoboyId", "==", auth.currentUser.uid), where("status", "==", "aceito")), snap => {
+            const activeCard = document.getElementById('activeJobCard');
+            activeCard.innerHTML = "";
+            if(!snap.empty) {
+                currentOrder = snap.docs[0].id;
+                document.getElementById('driverChatArea').classList.remove('hidden');
+                syncChat(currentOrder, 'driverChatBox');
+                activeCard.innerHTML = `<div class="glass-card border-success mb-4">
+                    <h6 class="fw-bold">Corrida em Andamento</h6>
+                    <button class="btn btn-success btn-sm w-100 mt-2" onclick="finishJob('${currentOrder}')">FINALIZAR ENTREGA</button>
+                </div>`;
+            } else {
+                document.getElementById('driverChatArea').classList.add('hidden');
+                currentOrder = null;
+            }
+        });
+    }
+
+    // --- SISTEMA DE CHAT ---
+    function syncChat(orderId, boxId) {
+        if(chatUnsub) chatUnsub();
+        const q = query(collection(db, "pedidos", orderId, "chat"), orderBy("data", "asc"));
+        chatUnsub = onSnapshot(q, snap => {
+            const box = document.getElementById(boxId);
+            let html = "";
+            snap.forEach(m => {
+                const isMe = m.data().sId === auth.currentUser.uid;
+                html += `<div class="bubble ${isMe ? 'bubble-me' : 'bubble-other'}">${m.data().t}</div>`;
+            });
+            box.innerHTML = html;
+            box.scrollTo(0, box.scrollHeight);
+        });
+    }
+
+    window.sendMessage = async (side) => {
+        const inp = document.getElementById(side === 'client' ? 'clientMsgInput' : 'driverMsgInput');
+        if(inp.value.trim() && currentOrder) {
+            const msg = inp.value; inp.value = "";
+            await addDoc(collection(db, "pedidos", currentOrder, "chat"), {
+                t: msg, sId: auth.currentUser.uid, data: serverTimestamp()
+            });
+        }
+    };
+
+    // --- MAPA ---
+    function syncMap(mId) {
+        if(!Lmap) {
+            Lmap = L.map('map').setView([-15, -47], 4);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(Lmap);
+            Lmarker = L.marker([0,0]).addTo(Lmap);
+        }
+        onSnapshot(doc(db, "usuarios", mId), d => {
+            if(d.exists() && d.data().lat) {
+                const pos = [d.data().lat, d.data().lng];
+                Lmarker.setLatLng(pos); Lmap.setView(pos, 16);
+            }
+        });
+    }
+
+    // --- BOTÕES ---
+    document.getElementById('calcBtn').addEventListener('click', () => {
+        const p = (Math.random() * 8 + 10).toFixed(2);
+        document.getElementById('finalPrice').innerText = p;
+        document.getElementById('priceDisplay').classList.remove('hidden');
+        window.tempPrice = parseFloat(p);
+    });
+
+    document.getElementById('orderBtn').addEventListener('click', async () => {
+        const o = document.getElementById('pickupLoc').value;
+        const d = document.getElementById('deliveryLoc').value;
+        if(o && d) {
+            await addDoc(collection(db, "pedidos"), {
+                pickupLoc: o, deliveryLoc: d, valorTotal: window.tempPrice,
+                status: 'pendente', clienteId: auth.currentUser.uid, data: serverTimestamp()
+            });
+        }
+    });
+
+    window.acceptJob = async id => {
+        const me = await getDoc(doc(db, "usuarios", auth.currentUser.uid));
+        updateDoc(doc(db, "pedidos", id), { 
+            status: 'aceito', 
+            motoboyId: auth.currentUser.uid, 
+            motoboyNome: me.data().nome || 'Motoboy' 
+        });
+    };
+
+    window.finishJob = id => updateDoc(doc(db, "pedidos", id), { status: 'finalizado' });
+    document.getElementById('loginBtn').addEventListener('click', () => {
+        signInWithEmailAndPassword(auth, document.getElementById('userEmail').value, document.getElementById('userPass').value);
+    });
+    document.getElementById('logoutBtn').addEventListener('click', () => signOut(auth).then(() => location.reload()));
+</script>
+</body>
+</html>
