@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meu Caixa - Mercado Livre</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- CDN do Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <div class="dashboard-container">
+        <header>
+            <h1>Fluxo de Caixa Geral</h1>
+            <p>Controle de vendas e saldo do Mercado Livre</p>
+        </header>
+
+        <!-- FORMULÁRIO DE LANÇAMENTO -->
+        <section class="form-container">
+            <h2>Novo Lançamento</h2>
+            <form id="form-lancamento">
+                <div class="form-group">
+                    <label for="descricao">Descrição / Categoria</label>
+                    <input type="text" id="descricao" required placeholder="Ex: Venda Camiseta, Taxa ML, Luz...">
+                </div>
+                <div class="form-group">
+                    <label for="tipo">Tipo</label>
+                    <select id="tipo" required>
+                        <option value="ENTRADA">Entrada (+)</option>
+                        <option value="SAÍDA">Saída (-)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="valor">Valor (R$)</label>
+                    <input type="number" id="valor" step="0.01" required placeholder="0,00">
+                </div>
+                <div class="form-group">
+                    <label for="status">Status</label>
+                    <select id="status" required>
+                        <option value="previsto">Previsto</option>
+                        <option value="efetivado">Efetivado</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-enviar">Lançar no Caixa</button>
+            </form>
+        </section>
+
+        <!-- BENTO GRID DE CARD DE SALDOS -->
+        <div class="bento-grid">
+            <div class="card">
+                <div class="card-title">Saldo Disponível</div>
+                <div class="card-value text-green" id="saldo-disponivel">R$ 0,00</div>
+                <div class="card-subtext">Liberado para saque</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Saldo Retido</div>
+                <div class="card-value text-amber" id="saldo-retido">R$ 0,00</div>
+                <div class="card-subtext">Vendas em garantia (PF)</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Lucro Líquido Real</div>
+                <div class="card-value text-blue" id="lucro-real">R$ 0,00</div>
+                <div class="card-subtext">Descontando taxas e custos</div>
+            </div>
+        </div>
+
+        <!-- EXTRATO FINANCEIRO -->
+        <section class="extrato-container">
+            <h2>Movimentações Recentes</h2>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Descrição</th>
+                        <th>Tipo</th>
+                        <th>Valor Líquido</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="tabela-fluxo"></tbody>
+            </table>
+        </section>
+    </div>
+
+    <!-- LÓGICA DO JAVASCRIPT INTEGRADA -->
+    <script>
+        // Suas credenciais reais do Supabase já configuradas
+        const URL_BANCO = 'https://wtdjttewnultbcjhmgst.supabase.co'; 
+        const KEY_BANCO = 'sb_publishable_Rgf3e5GambtmmyXYj_33_A_-yDKDrau';
+
+        const clienteSupabase = window.supabase.createClient(URL_BANCO, KEY_BANCO);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            carregarDadosDoBanco();
+            configurarFormulario();
+        });
+
+        // 1. BUSCAR REGISTROS E ATUALIZAR OS CARDS/TABELA
+        async function carregarDadosDoBanco() {
+            try {
+                const { data: movimentacoes, error } = await clienteSupabase
+                    .from('fluxo_caixa')
+                    .select('*')
+                    .order('data_competencia', { ascending: false });
+
+                if (error) throw error;
+
+                const tabelaBody = document.getElementById('tabela-fluxo');
+                const cardDisponivel = document.getElementById('saldo-disponivel');
+                const cardRetido = document.getElementById('saldo-retido');
+                const cardLucro = document.getElementById('lucro-real');
+
+                if (!tabelaBody) return;
+                tabelaBody.innerHTML = '';
+
+                let totalDisponivel = 0;
+                let totalRetido = 0;
+                let totalLucro = 0;
+
+                movimentacoes.forEach(item => {
+                    const valorNumerico = parseFloat(item.valor);
+
+                    if (item.tipo === 'ENTRADA') {
+                        totalLucro += valorNumerico;
+                        if (item.status === 'efetivado') {
+                            totalDisponivel += valorNumerico;
+                        } else {
+                            totalRetido += valorNumerico;
+                        }
+                    } else if (item.tipo === 'SAÍDA') {
+                        totalLucro -= valorNumerico;
+                        if (item.status === 'efetivado') {
+                            totalDisponivel -= valorNumerico;
+                        }
+                    }
+
+                    const linha = document.createElement('tr');
+                    const dataFormatada = new Date(item.data_competencia).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+                    const classeTipo = item.tipo === 'ENTRADA' ? 'text-green' : 'text-red';
+                    const classeBadge = item.status === 'efetivado' ? 'badge-success' : 'badge-warning';
+
+                    linha.innerHTML = `
+                        <td>${dataFormatada}</td>
+                        <td>${item.descricao || item.categoria}</td>
+                        <td><strong class="${classeTipo}">${item.tipo}</strong></td>
+                        <td>${valorNumerico.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                        <td><span class="badge ${classeBadge}">${item.status}</span></td>
+                        <td><button class="btn-deletar" onclick="deletarRegistro('${item.id}')">Excluir</button></td>
+                    `;
+                    tabelaBody.appendChild(linha);
+                });
+
+                if (cardDisponivel) cardDisponivel.textContent = totalDisponivel.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                if (cardRetido) cardRetido.textContent = totalRetido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                if (cardLucro) cardLucro.textContent = totalLucro.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+            } catch (err) {
+                console.error('Erro ao buscar dados:', err.message);
+            }
+        }
+
+        // 2. ENVIAR UM NOVO LANÇAMENTO PARA O SUPABASE
+        function configurarFormulario() {
+            const form = document.getElementById('form-lancamento');
+            if (!form) return;
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const descricao = document.getElementById('descricao').value;
+                const tipo = document.getElementById('tipo').value;
+                const valor = parseFloat(document.getElementById('valor').value);
+                const status = document.getElementById('status').value;
+                const dataHoje = new Date().toISOString().split('T')[0];
+
+                try {
+                    const { error } = await clienteSupabase
+                        .from('fluxo_caixa')
+                        .insert([
+                            { 
+                                descricao: descricao, 
+                                tipo: tipo, 
+                                valor: valor, 
+                                status: status, 
+                                data_competencia: dataHoje 
+                            }
+                        ]);
+
+                    if (error) throw error;
+
+                    form.reset();
+                    carregarDadosDoBanco(); // Recarrega os dados imediatamente na tela
+
+                } catch (err) {
+                    alert('Erro ao salvar lançamento: ' + err.message);
+                }
+            });
+        }
+
+        // 3. APAGAR UM REGISTRO DO BANCO
+        async function deletarRegistro(id) {
+            if (!confirm('Tem certeza que deseja apagar este lançamento?')) return;
+
+            try {
+                const { error } = await clienteSupabase
+                    .from('fluxo_caixa')
+                    .delete()
+                    .eq('id', id);
+
+                if (error) throw error;
+
+                carregarDadosDoBanco(); // Atualiza os saldos e a tabela na hora
+
+            } catch (err) {
+                alert('Erro ao deletar: ' + err.message);
+            }
+        }
+    </script>
+</body>
+</html>
