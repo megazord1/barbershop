@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meu Caixa - Mercado Livre</title>
+    
+    <!-- Vincula o seu arquivo de estilo separado -->
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- CDN oficial do Supabase para o JavaScript reconhecer os comandos do banco -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <div class="dashboard-container">
+        <header>
+            <h1>Fluxo de Caixa Geral</h1>
+            <p>Controle de vendas e saldo do Mercado Livre</p>
+        </header>
+
+        <!-- Espaço do Bento Grid para os Cards de Saldo -->
+        <div class="bento-grid">
+            <div class="card">
+                <div class="card-title">Saldo Disponível</div>
+                <div class="card-value text-green" id="saldo-disponivel">R$ 0,00</div>
+                <div class="card-subtext">Liberado para saque</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Saldo Retido</div>
+                <div class="card-value text-amber" id="saldo-retido">R$ 0,00</div>
+                <div class="card-subtext">Vendas em garantia (PF)</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Lucro Líquido Real</div>
+                <div class="card-value text-blue" id="lucro-real">R$ 0,00</div>
+                <div class="card-subtext">Descontando taxas e custos</div>
+            </div>
+        </div>
+
+        <!-- Tabela de Movimentações Recentes -->
+        <section class="extrato-container">
+            <h2>Movimentações Recentes</h2>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Descrição</th>
+                        <th>Tipo</th>
+                        <th>Valor Líquido</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="tabela-fluxo">
+                    <!-- O JavaScript vai injetar as linhas aqui dentro dinamicamente -->
+                </tbody>
+            </table>
+        </section>
+    </div>
+
+    <!-- O VÍNCULO QUE FALTAVA: Conecta o seu arquivo de lógica à estrutura da página -->
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+/* Grid layout para a tela do navegador */
+.bento-grid {
+display: grid;
+grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+gap: 20px;
+margin-bottom: 30px;
+}
+/* Estilo base dos cards no navegador */
+.card {
+background: #ffffff;
+border-radius: 8px;
+padding: 20px;
+border: 1px solid #e2e8f0;
+}
