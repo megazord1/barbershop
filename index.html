@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meu Caixa - Mercado Livre</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- CDN do Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <div class="dashboard-container">
+        <header>
+            <h1>Fluxo de Caixa Geral</h1>
+            <p>Controle de vendas e saldo do Mercado Livre</p>
+        </header>
+
+        <div class="bento-grid">
+            <div class="card">
+                <div class="card-title">Saldo Disponível</div>
+                <div class="card-value text-green" id="saldo-disponivel">R$ 0,00</div>
+                <div class="card-subtext">Liberado para saque</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Saldo Retido</div>
+                <div class="card-value text-amber" id="saldo-retido">R$ 0,00</div>
+                <div class="card-subtext">Vendas em garantia (PF)</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Lucro Líquido Real</div>
+                <div class="card-value text-blue" id="lucro-real">R$ 0,00</div>
+                <div class="card-subtext">Descontando taxas e custos</div>
+            </div>
+        </div>
+
+        <section class="extrato-container">
+            <h2>Movimentações Recentes</h2>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Descrição</th>
+                        <th>Tipo</th>
+                        <th>Valor Líquido</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="tabela-fluxo"></tbody>
+            </table>
+        </section>
+    </div>
+
+    <!-- CÓDIGO JAVASCRIPT INJETADO DIRETO PARA MATAR O ERRO DE DUPLICIDADE -->
+    <script>
+        // Substitua com suas credenciais reais do Supabase
+        const URL_BANCO = 'https://wtdjttewnultbcjhmgst.supabase.co'; 
+        const KEY_BANCO = 'sb_publishable_Rgf3e5GambtmmyXYj_33_A_-yDKDrau';     
+
+        // Inicialização com nome de variável totalmente diferente para evitar conflitos de escopo
+        const clienteSupabase = window.supabase.createClient(URL_BANCO, KEY_BANCO);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            carregarDadosDoBanco();
+        });
+
+        async function carregarDadosDoBanco() {
+            try {
+                const { data: movimentacoes, error } = await clienteSupabase
+                    .from('fluxo_caixa')
+                    .select('*')
+                    .order('data_competencia', { ascending: false });
+
+                if (error) throw error;
+
+                const tabelaBody = document.getElementById('tabela-fluxo');
+                const cardDisponivel = document.getElementById('saldo-disponivel');
+                const cardRetido = document.getElementById('saldo-retido');
+                const cardLucro = document.getElementById('lucro-real');
+
+                if (!tabelaBody) return;
+                tabelaBody.innerHTML = '';
+
+                let totalDisponivel = 0;
+                let totalRetido = 0;
+                let totalLucro = 0;
+
+                movimentacoes.forEach(item => {
+                    const valorNumerico = parseFloat(item.valor);
+
+                    if (item.tipo === 'ENTRADA') {
+                        totalLucro += valorNumerico;
+                        if (item.status === 'efetivado') {
+                            totalDisponivel += valorNumerico;
+                        } else {
+                            totalRetido += valorNumerico;
+                        }
+                    } else if (item.tipo === 'SAÍDA') {
+                        totalLucro -= valorNumerico;
+                        if (item.status === 'efetivado') {
+                            totalDisponivel -= valorNumerico;
+                        }
+                    }
+
+                    const linha = document.createElement('tr');
+                    const dataFormatada = new Date(item.data_competencia).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+                    const classeTipo = item.tipo === 'ENTRADA' ? 'text-green' : 'text-red';
+                    const classeBadge = item.status === 'efetivado' ? 'badge-success' : 'badge-warning';
+
+                    linha.innerHTML = `
+                        <td>${dataFormatada}</td>
+                        <td>${item.descricao || item.categoria}</td>
+                        <td><strong class="${classeTipo}">${item.tipo}</strong></td>
+                        <td>${valorNumerico.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                        <td><span class="badge ${classeBadge}">${item.status}</span></td>
+                    `;
+                    tabelaBody.appendChild(linha);
+                });
+
+                if (cardDisponivel) cardDisponivel.textContent = totalDisponivel.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                if (cardRetido) cardRetido.textContent = totalRetido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                if (cardLucro) cardLucro.textContent = totalLucro.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+            } catch (err) {
+                console.error('Erro:', err.message);
+            }
+        }
+    </script>
+</body>
+</html>
