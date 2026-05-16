@@ -1,0 +1,27 @@
+/* ========================================================
+   IDENTIDADE VISUAL DA LOGO - KRAUSS
+   ======================================================== */
+.brand-logo {
+    font-size: 36px;
+    font-weight: 900;
+    letter-spacing: 0.18em; /* Deixa o texto com espaçamento elegante de marca */
+    text-align: center;
+    color: #ffffff;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    font-family: "Segoe UI", -apple-system, sans-serif;
+}
+
+.brand-logo-panel {
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    color: #ffffff;
+    text-transform: uppercase;
+}
+
+/* O ponto azul neon tecnológico */
+.dot-tech {
+    color: #3b82f6;
+    text-shadow: 0 0 12px rgba(59, 130, 246, 0.6);
+}
