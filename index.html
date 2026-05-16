@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KRAUSS - Sistema Financeiro</title>
+    <link rel="stylesheet" href="style.css?v=13">
+    <!-- CDN do Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <!-- SECTION 1: TELA DE LOGIN -->
+    <div id="area-login" class="login-container">
+        <div class="login-card">
+            <div class="brand-logo">
+                KRAUSS<span class="dot-tech">.</span>
+            </div>
+            <p>Faça login para gerenciar o Fluxo de Caixa</p>
+            <form id="form-login">
+                <div class="form-group-login">
+                    <label for="login-email">E-mail</label>
+                    <input type="email" id="login-email" required placeholder="seu@email.com">
+                </div>
+                <div class="form-group-login">
+                    <label for="login-senha">Senha</label>
+                    <input type="password" id="login-senha" required placeholder="••••••••">
+                </div>
+                <button type="submit" class="btn-login">Entrar no Sistema</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- SECTION 2: PAINEL FINANCEIRO -->
+    <div id="area-painel" class="dashboard-container" style="display: none;">
+        <header class="header-painel">
+            <div>
+                <div class="brand-logo-panel">KRAUSS<span class="dot-tech">.</span></div>
+                <p>Controle de vendas e saldo do Mercado Livre</p>
+            </div>
+            <button id="btn-sair" class="btn-sair">Sair do Sistema</button>
+        </header>
+
+        <!-- FORMULÁRIO DE LANÇAMENTO HÍBRIDO (ENTRADAS E SAÍDAS) -->
+        <section class="form-container">
+            <h2>Novo Lançamento de Caixa</h2>
+            <form id="form-lancamento">
+                <div class="form-group">
+                    <label for="tipo-movimentacao">Tipo de Movimentação</label>
+                    <select id="tipo-movimentacao" required onchange="ajustarCamposFormulario()">
+                        <option value="ENTRADA">Entrada (Venda / Aporte)</option>
+                        <option value="SAÍDA">Saída (Compra de Mercadoria / Despesa)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="data-venda">Data da Operação</label>
+                    <input type="date" id="data-venda" required>
+                </div>
+                <div class="form-group">
+                    <label for="descricao">Descrição / Produto</label>
+                    <input type="text" id="descricao" required placeholder="Ex: Venda Camiseta Polo X ou Compra de Tecido">
+                </div>
+                
+                <!-- Bloco de valores dinâmicos para ENTRADAS -->
+                <div id="bloco-valores-entrada" style="display: contents;">
+                    <div class="form-group">
+                        <label for="valor-bruto">Valor da Venda (R$)</label>
+                        <input type="text" id="valor-bruto" placeholder="0,00" oninput="mascaraMoeda(this); calcularPreviaLiquida()">
+                    </div>
+                    <div class="form-group">
+                        <label for="custo-produto">Custo do Produto (R$)</label>
+                        <input type="text" id="custo-produto" placeholder="0,00" oninput="mascaraMoeda(this); calcularPreviaLiquida()">
+                    </div>
+                    <div class="form-group">
+                        <label for="taxa-ml">Taxa Mercado Livre (R$)</label>
+                        <input type="text" id="taxa-ml" placeholder="0,00" oninput="mascaraMoeda(this); calcularPreviaLiquida()">
+                    </div>
+                    <div class="form-group">
+                        <label for="custo-envio">Frete / Envio (R$)</label>
+                        <input type="text" id="custo-envio" placeholder="0,00" oninput="mascaraMoeda(this); calcularPreviaLiquida()">
+                    </div>
+                </div>
+
+                <!-- Bloco de valor único para SAÍDAS -->
+                <div id="bloco-valores-saida" class="form-group" style="display: none;">
+                    <label for="valor-saida">Valor Total da Saída (R$)</label>
+                    <input type="text" id="valor-saida" placeholder="0,00" oninput="mascaraMoeda(this); calcularPreviaLiquida()">
+                </div>
+
+                <div class="form-group">
+                    <label for="status">Status</label>
+                    <select id="status" required>
+                        <option value="efetivado">Efetivado (Dinheiro já saiu/entrou)</option>
+                        <option value="previsto">Previsto (Agendado)</option>
+                    </select>
+                </div>
+                
+                <div class="previa-liquida-box">
+                    <span id="previa-label">Líquido Estimado:</span>
+                    <strong id="previa-valor">R$ 0,00</strong>
+                </div>
+
+                <button type="submit" class="btn-enviar">Lançar no Caixa</button>
+            </form>
+        </section>
+
+        <!-- FILTRO MENSAL INTELIGENTE -->
+        <section class="filtro-container" style="margin-bottom: 20px; display: flex; gap: 15px; align-items: center; background: rgba(15, 23, 42, 0.3); padding: 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.04);">
+            <span style="font-size: 14px; font-weight: 600; color: #94a3b8; text-transform: uppercase;">Filtrar Período:</span>
+            <select id="filtro-mes" onchange="carregarDadosDoBanco()" style="padding: 8px 12px; border-radius: 8px; background: #0f172a; color: white; border: 1px solid rgba(255,255,255,0.1); cursor: pointer;"></select>
+            <select id="filtro-ano" onchange="carregarDadosDoBanco()" style="padding: 8px 12px; border-radius: 8px; background: #0f172a; color: white; border: 1px solid rgba(255,255,255,0.1); cursor: pointer;"></select>
+        </section>
+
+        <!-- BENTO GRID EXPANDIDO -->
+        <div class="bento-grid">
+            <!-- CARD DUPLO: VENDAS + FATURAMENTO BRUTO -->
+            <div class="card">
+                <div class="card-title">Volume de Vendas (Mês)</div>
+                <div class="card-value text-blue" id="qtd-vendas">0</div>
+                <div class="card-subtext" style="font-size: 0.95rem; margin-top: 5px; color: #e2e8f0;">
+                    Bruto: <strong id="faturamento-bruto" class="text-blue">R$ 0,00</strong>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">Saldo Disponível no Mês</div>
+                <div class="card-value text-green" id="saldo-disponivel">R$ 0,00</div>
+                <div class="card-subtext">Liberado para saque</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Saldo Retido no Mês</div>
+                <div class="card-value text-amber" id="saldo-retido">R$ 0,00</div>
+                <div class="card-subtext">Aguardando liberação do ML</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Lucro Líquido no Mês</div>
+                <div class="card-value text-green" id="lucro-real">R$ 0,00</div>
+                <div class="card-subtext">Descontando taxas e custos</div>
+            </div>
+            <!-- CARD DESTAQUE: TOP PRODUTO DO MÊS -->
+            <div class="card" style="grid-column: span 4; background: linear-gradient(135deg, rgba(30, 41, 59, 0.5) 0%, rgba(15, 23, 42, 0.8) 100%);">
+                <div class="card-title">🏆 Produto Mais Vendido do Mês</div>
+                <div class="card-value" id="top-produto-destaque" style="font-size: 1.6rem; margin-top: 5px; color: #f59e0b;">Nenhum produto</div>
+                <div class="card-subtext" id="top-produto-unidades">0 unidades comercializadas</div>
+            </div>
+        </div>
+
+        <!-- PODIO COMPLETO DE TOP PRODUTOS -->
+        <section class="extrato-container" style="margin-top: 25px; margin-bottom: 25px;">
+            <h2>Ranking de Performance de Produtos</h2>
+            <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.04); border-radius: 12px; padding: 15px;">
+                <table class="data-table" style="margin-top: 0;">
+                    <thead>
+                        <tr>
+                            <th style="width: 80px;">Posição</th>
+                            <th>Produto / Descrição</th>
+                            <th style="text-align: center; width: 150px;">Unidades Vendidas</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ranking-produtos-body">
+                        <tr>
+                            <td colspan="3" style="text-align: center; color: #64748b;">Nenhuma venda realizada neste período.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- EXTRATO FINANCEIRO MOSTRANDO BRUTO E LÍQUIDO -->
+        <section class="extrato-container">
+            <h2>Movimentações do Período Selecionado</h2>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Descrição</th>
+                        <th>Tipo</th>
+                        <th>Valor Bruto</th>
+                        <th>Valor Líquido</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="tabela-fluxo"></tbody>
+            </table>
+        </section>
+    </div>
+
+    <!-- LÓGICA DO JAVASCRIPT E INTEGRAÇÃO SUPABASE -->
+    <script>
+        const URL_BANCO = 'https://wtdjttewnultbcjhmgst.supabase.co'; 
+        const KEY_BANCO = 'sb_publishable_Rgf3e5GambtmmyXYj_33_A_-yDKDrau';
+
+        const clienteSupabase = window.supabase.createClient(URL_BANCO, KEY_BANCO);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            configurarFiltrosIniciais();
+            verificarSessao();
+            configurarLogin();
+            configurarFormulario();
+            
+            document.getElementById('btn-sair').addEventListener('click', encerrarSessao);
+        });
+
+        function configurarFiltrosIniciais() {
+            const campoMes = document.getElementById('filtro-mes');
+            const campoAno = document.getElementById('filtro-ano');
+            const dataAtual = new Date();
+            
+            document.getElementById('data-venda').value = dataAtual.toISOString().split('T')[0];
+
+            const meses = [
+                "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+                "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+            ];
+
+            meses.forEach((nome, index) => {
+                let opt = document.createElement('option');
+                opt.value = String(index + 1).padStart(2, '0');
+                opt.textContent = nome;
+                if (index === dataAtual.getMonth()) opt.selected = true;
+                campoMes.appendChild(opt);
+            });
+
+            const anoAtual = dataAtual.getFullYear();
+            for (let a = anoAtual - 2; a <= anoAtual + 2; a++) {
+                let opt = document.createElement('option');
+                opt.value = a;
+                opt.textContent = a;
+                if (a === anoAtual) opt.selected = true;
+                campoAno.appendChild(opt);
+            }
+        }
+
+        function ajustarCamposFormulario() {
+            const tipo = document.getElementById('tipo-movimentacao').value;
+            const blocoEntrada = document.getElementById('bloco-valores-entrada');
+            const blocoSaida = document.getElementById('bloco-valores-saida');
+            const previaLabel = document.getElementById('previa-label');
+
+            if (tipo === 'ENTRADA') {
+                blocoEntrada.style.display = 'contents';
+                blocoSaida.style.display = 'none';
+                previaLabel.textContent = 'Líquido Estimado:';
+            } else {
+                blocoEntrada.style.display = 'none';
+                blocoSaida.style.display = 'block';
+                previaLabel.textContent = 'Total a Deduzir:';
+            }
+            calcularPreviaLiquida();
+        }
+
+        function mascaraMoeda(campo) {
+            let valor = campo.value.replace(/\D/g, "");
+            if (valor === "") {
+                campo.value = "";
+                return;
+            }
+            valor = (parseInt(valor) / 100).toFixed(2) + "";
+            valor = valor.replace(".", ",");
+            valor = valor.replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
+            campo.value = valor;
+        }
+
+        function converterParaNumero(valorTexto) {
+            if (!valorTexto) return 0;
+            let limpo = valorTexto.replace(/\./g, "").replace(",", ".");
+            return parseFloat(limpo) || 0;
+        }
+
+        function calcularPreviaLiquida() {
+            const tipo = document.getElementById('tipo-movimentacao').value;
+            const campoPrevia = document.getElementById('previa-valor');
+            
+            if (tipo === 'ENTRADA') {
+                const venda = converterParaNumero(document.getElementById('valor-bruto').value);
+                const custo = converterParaNumero(document.getElementById('custo-produto').value);
+                const taxa = converterParaNumero(document.getElementById('taxa-ml').value);
+                const envio = converterParaNumero(document.getElementById('custo-envio').value);
+
+                const liquido = venda - custo - taxa - envio;
+                campoPrevia.textContent = liquido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                campoPrevia.style.color = liquido < 0 ? '#f87171' : '#4ade80';
+            } else {
+                const saida = converterParaNumero(document.getElementById('valor-saida').value);
+                campoPrevia.textContent = '-' + saida.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                campoPrevia.style.color = '#f87171';
+            }
+        }
+
+        async function verificarSessao() {
+            const { data: { session } } = await clienteSupabase.auth.getSession();
+            if (session) {
+                mostrarPainel();
+            } else {
+                mostrarLogin();
+            }
+        }
+
+        function mostrarPainel() {
+            document.getElementById('area-login').style.display = 'none';
+            document.getElementById('area-painel').style.display = 'block';
+            carregarDadosDoBanco();
+        }
+
+        function mostrarLogin() {
+            document.getElementById('area-login').style.display = 'flex';
+            document.getElementById('area-painel').style.display = 'none';
+        }
+
+        function configurarLogin() {
+            const formLogin = document.getElementById('form-login');
+            formLogin.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const email = document.getElementById('login-email').value;
+                const senha = document.getElementById('login-senha').value;
+
+                try {
+                    const { error } = await clienteSupabase.auth.signInWithPassword({ email, password: senha });
+                    if (error) throw error;
+                    mostrarPainel();
+                } catch (err) {
+                    alert('Falha no login: Credenciais incorretas.');
+                }
+            });
+        }
+
+        async function encerrarSessao() {
+            await clienteSupabase.auth.signOut();
+            mostrarLogin();
+        }
+
+        async function carregarDadosDoBanco() {
+            try {
+                const mesSelecionado = document.getElementById('filtro-mes').value;
+                const anoSelecionado = document.getElementById('filtro-ano').value;
+
+                const dataInicio = `${anoSelecionado}-${mesSelecionado}-01`;
+                const dataFim = `${anoSelecionado}-${mesSelecionado}-31`;
+
+                const { data: movimentacoes, error } = await clienteSupabase
+                    .from('fluxo_caixa')
+                    .select('*')
+                    .gte('data_competencia', dataInicio)
+                    .lte('data_competencia', dataFim)
+                    .order('data_competencia', { ascending: false });
+
+                if (error) throw error;
+
+                const tabelaBody = document.getElementById('tabela-fluxo');
+                const cardQtd = document.getElementById('qtd-vendas');
+                const cardBruto = document.getElementById('faturamento-bruto');
+                const cardDisponivel = document.getElementById('saldo-disponivel');
+                const cardRetido = document.getElementById('saldo-retido');
+                const cardLucro = document.getElementById('lucro-real');
+
+                const cardTopDestaque = document.getElementById('top-produto-destaque');
+                const cardTopUnidades = document.getElementById('top-produto-unidades');
+                const rankingBody = document.getElementById('ranking-produtos-body');
+
+                if (!tabelaBody) return;
+                tabelaBody.innerHTML = '';
+
+                let totalBruto = 0;
+                let totalDisponivel = 0;
+                let totalRetido = 0;
+                let totalLucro = 0;
+                let totalVendas = 0;
+
+                const contagemProdutos = {};
+
+                movimentacoes.forEach(item => {
+                    const valorBase = parseFloat(item.valor);
+                    let valorLiquidoCalculado = valorBase;
+                    let nomeExibicaoProduto = item.descricao || 'Produto sem Nome';
+
+                    if (item.tipo === 'ENTRADA') {
+                        totalVendas++;
+                        totalBruto += valorBase; 
+
+                        if (item.categoria && item.categoria.startsWith('LQD_META:')) {
+                            try {
+                                const partesMeta = item.categoria.split('|');
+                                const valorLiquidoTexto = partesMeta[0].replace('LQD_META:', '');
+                                valorLiquidoCalculado = parseFloat(valorLiquidoTexto);
+                                
+                                if (partesMeta[1]) {
+                                    nomeExibicaoProduto = partesMeta[1];
+                                }
+                            } catch(e) {
+                                valorLiquidoCalculado = valorBase;
+                            }
+                        } else if (item.categoria) {
+                            nomeExibicaoProduto = item.descricao || item.categoria;
+                        }
+
+                        totalLucro += valorLiquidoCalculado;
+
+                        if (item.status === 'efetivado') {
+                            totalDisponivel += valorLiquidoCalculado;
+                        } else {
+                            totalRetido += valorLiquidoCalculado;
+                        }
+
+                        const nomeChaveRanking = nomeExibicaoProduto.trim();
+                        contagemProdutos[nomeChaveRanking] = (contagemProdutos[nomeChaveRanking] || 0) + 1;
+
+                    } else if (item.tipo === 'SAÍDA') {
+                        totalLucro -= valorBase;
+                        if (item.status === 'efetivado') {
+                            totalDisponivel -= valorBase;
+                        }
+                        if (item.categoria && item.categoria.startsWith('LQD_META:')) {
+                            const partesMeta = item.categoria.split('|');
+                            nomeExibicaoProduto = partesMeta[1] || item.descricao || 'Saída';
+                        } else {
+                            nomeExibicaoProduto = item.descricao || item.categoria || 'Saída';
+                        }
+                        // Saídas têm o mesmo valor bruto e líquido (representa a dedução total)
+                        valorLiquidoCalculado = valorBase;
+                    }
+
+                    const linha = document.createElement('tr');
+                    const dataFormatada = new Date(item.data_competencia).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+                    const classeTipo = item.tipo === 'ENTRADA' ? 'text-green' : 'text-red';
+                    const classeBadge = item.status === 'efetivado' ? 'badge-success' : 'badge-warning';
+                    
+                    // Definição de cores específicas para as colunas de valores da tabela
+                    const corLiquidoTabela = item.tipo === 'ENTRADA' ? 'color: #4ade80; font-weight: 600;' : 'color: #f87171;';
+
+                    let botaoEfetivar = '';
+                    if (item.status === 'previsto') {
+                        botaoEfetivar = `<button class="btn-efetivar" onclick="efetivarLancamento('${item.id}')">Efetivar</button> `;
+                    }
+
+                    linha.innerHTML = `
+                        <td>${dataFormatada}</td>
+                        <td>${nomeExibicaoProduto}</td>
+                        <td><strong class="${classeTipo}">${item.tipo}</strong></td>
+                        <td>${valorBase.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                        <td style="${corLiquidoTabela}">${valorLiquidoCalculado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                        <td><span class="badge ${classeBadge}">${item.status}</span></td>
+                        <td>
+                            <div class="actions-wrapper">
+                                ${botaoEfetivar}
+                                <button class="btn-deletar" onclick="deletarRegistro('${item.id}')">Excluir</button>
+                            </div>
+                        </td>
+                    `;
+                    tabelaBody.appendChild(linha);
+                });
+
+                if (cardQtd) cardQtd.textContent = totalVendas;
+                if (cardBruto) cardBruto.textContent = totalBruto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                if (cardDisponivel) cardDisponivel.textContent = totalDisponivel.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                if (cardRetido) cardRetido.textContent = totalRetido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                if (cardLucro) cardLucro.textContent = totalLucro.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+                // Processamento do Ranking de Produtos
+                const listaOrdenada = Object.keys(contagemProdutos).map(nome => {
+                    return { nome: nome, quantidade: contagemProdutos[nome] };
+                }).sort((a, b) => b.quantidade - a.quantidade);
+
+                if (listaOrdenada.length > 0) {
+                    cardTopDestaque.textContent = listaOrdenada[0].nome;
+                    cardTopUnidades.textContent = `${listaOrdenada[0].quantidade} ${listaOrdenada[0].quantidade === 1 ? 'unidade vendida' : 'unidades vendidas'}`;
+
+                    rankingBody.innerHTML = '';
+                    listaOrdenada.slice(0, 5).forEach((prod, index) => {
+                        const tr = document.createElement('tr');
+                        let medalha = `${index + 1}º`;
+                        if (index === 0) medalha = '🥇 1º';
+                        if (index === 1) medalha = '🥈 2º';
+                        if (index === 2) medalha = '🥉 3º';
+
+                        tr.innerHTML = `
+                            <td><strong>${medalha}</strong></td>
+                            <td>${prod.nome}</td>
+                            <td style="text-align: center; font-weight: bold; color: #38bdf8;">${prod.quantidade}</td>
+                        `;
+                        rankingBody.appendChild(tr);
+                    });
+                } else {
+                    cardTopDestaque.textContent = "Nenhum produto";
+                    cardTopUnidades.textContent = "0 unidades comercializadas";
+                    rankingBody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #64748b;">Nenhuma venda realizada neste período.</td></tr>`;
+                }
+
+            } catch (err) {
+                console.error('Erro ao buscar dados:', err.message);
+            }
+        }
+
+        async function efetivarLancamento(id) {
+            try {
+                const { data, error } = await clienteSupabase
+                    .from('fluxo_caixa')
+                    .update({ status: 'efetivado' })
+                    .eq('id', id)
+                    .select();
+
+                if (error) throw error;
+
+                alert('Lançamento efetivado com sucesso!');
+                carregarDadosDoBanco();
+
+            } catch (err) {
+                alert('Erro ao efetivar lançamento: ' + err.message);
+            }
+        }
+
+        function configurarFormulario() {
+            const form = document.getElementById('form-lancamento');
+            if (!form) return;
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const tipo = document.getElementById('tipo-movimentacao').value;
+                const dataCustomizada = document.getElementById('data-venda').value;
+                const descricaoInput = document.getElementById('descricao').value;
+                const status = document.getElementById('status').value;
+                
+                let valorParaSalvar = 0;
+                let textoCategoriaHibrida = '';
+
+                if (tipo === 'ENTRADA') {
+                    const vendaBruta = converterParaNumero(document.getElementById('valor-bruto').value);
+                    const custo = converterParaNumero(document.getElementById('custo-produto').value);
+                    const taxa = converterParaNumero(document.getElementById('taxa-ml').value);
+                    const envio = converterParaNumero(document.getElementById('custo-envio').value);
+                    
+                    const valorLiquidoFinal = vendaBruta - custo - taxa - envio;
+
+                    valorParaSalvar = vendaBruta;
+                    textoCategoriaHibrida = `LQD_META:${valorLiquidoFinal}|${descricaoInput}`;
+                } else {
+                    valorParaSalvar = converterParaNumero(document.getElementById('valor-saida').value);
+                    textoCategoriaHibrida = `LQD_META:${valorParaSalvar}|Compra de Estoque`;
+                }
+
+                try {
+                    const { error } = await clienteSupabase
+                        .from('fluxo_caixa')
+                        .insert([
+                            { 
+                                descricao: descricaoInput,
+                                categoria: textoCategoriaHibrida, 
+                                tipo: tipo, 
+                                valor: valorParaSalvar, 
+                                status: status, 
+                                data_competencia: dataCustomizada 
+                            }
+                        ]);
+
+                    if (error) throw error;
+
+                    form.reset();
+                    document.getElementById('data-venda').value = new Date().toISOString().split('T')[0];
+                    ajustarCamposFormulario();
+                    carregarDadosDoBanco();
+
+                } catch (err) {
+                    alert('Erro ao salvar lançamento: ' + err.message);
+                }
+            });
+        }
+
+        async function deletarRegistro(id) {
+            if (!confirm('Tem certeza que deseja apagar este lançamento?')) return;
+
+            try {
+                const { error } = await clienteSupabase
+                    .from('fluxo_caixa')
+                    .delete()
+                    .eq('id', id);
+
+                if (error) throw error;
+                carregarDadosDoBanco();
+
+            } catch (err) {
+                alert('Erro ao deletar: ' + err.message);
+            }
+        }
+    </script>
+</body>
+</html>
